@@ -1,0 +1,110 @@
+ETAPA 04 - CONSULTAS, VISÕES E ÍNDICES
+
+CONSULTAS
+
+1) JOIN + GROUP BY + HAVING
+Funcionários que fizeram mais de 1 venda
+
+SELECT f.nome, COUNT(v.nfe) AS total_vendas
+FROM funcionario f
+JOIN vende v ON f.matricula = v.matricula_func
+GROUP BY f.nome
+HAVING COUNT(v.nfe) > 1;
+
+
+2) 2 JOINS + WHERE
+Nome do cliente, funcionário e data da venda
+
+SELECT c.nome AS cliente, f.nome AS funcionario, v.data
+FROM vende v
+JOIN cliente c ON v.cpf_cliente = c.cpf
+JOIN funcionario f ON v.matricula_func = f.matricula
+WHERE v.data >= '2024-01-01';
+
+
+3) ANTI JOIN
+Clientes que não fizeram compras
+
+SELECT c.nome
+FROM cliente c
+LEFT JOIN vende v ON c.cpf = v.cpf_cliente
+WHERE v.cpf_cliente IS NULL;
+
+
+4) SUBCONSULTA
+Produtos com preço acima da média
+
+SELECT nome, preco_base
+FROM produto
+WHERE preco_base > (
+    SELECT AVG(preco_base)
+    FROM produto
+);
+
+
+VISÕES
+
+1) View com 3 JOIN + WHERE
+
+CREATE VIEW vw_vendas_detalhadas AS
+SELECT 
+    v.nfe,
+    c.nome AS cliente,
+    f.nome AS funcionario,
+    p.nome AS produto,
+    vp.quantidade
+FROM vende v
+JOIN cliente c ON v.cpf_cliente = c.cpf
+JOIN funcionario f ON v.matricula_func = f.matricula
+JOIN vende_produto vp ON v.nfe = vp.numero_nfe
+JOIN produto p ON vp.codigo_produto = p.codigo
+WHERE vp.quantidade > 1;
+
+
+2) View com JOIN + SUBCONSULTA
+
+CREATE VIEW vw_funcionarios_destaque AS
+SELECT f.nome, COUNT(v.nfe) AS total_vendas
+FROM funcionario f
+JOIN vende v ON f.matricula = v.matricula_func
+GROUP BY f.nome
+HAVING COUNT(v.nfe) > (
+    SELECT AVG(qtd)
+    FROM (
+        SELECT COUNT(nfe) AS qtd
+        FROM vende
+        GROUP BY matricula_func
+    ) AS media
+);
+
+
+JUSTIFICATIVAS
+
+- View vw_vendas_detalhadas: utilizada para análise operacional das vendas, permitindo visualizar cliente, funcionário e produtos vendidos.
+
+- View vw_funcionarios_destaque: utilizada para identificar funcionários com desempenho acima da média.
+
+
+ÍNDICES
+
+1) Índice para cliente nas vendas
+
+CREATE INDEX ind_vende_cliente
+ON vende(cpf_cliente);
+
+Justificativa: melhora desempenho em consultas e joins envolvendo cliente.
+
+
+2) Índice para funcionário nas vendas
+
+CREATE INDEX ind_vende_funcionario
+ON vende(matricula_func);
+
+Justificativa: melhora desempenho em consultas agregadas e relatórios por funcionário.
+
+
+EXPLAIN (ANTES E DEPOIS)
+
+EXPLAIN
+SELECT * FROM vende
+WHERE cpf_cliente = '12345678900';

@@ -1,0 +1,215 @@
+-- =====================================================================
+-- ETAPA 05  -  Funcoes, Procedimentos e Triggers
+-- =====================================================================
+USE supermercado;
+
+-- =====================================================================
+-- 1) FUNCOES (FUNCTIONS)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 1.1  fn_total_venda(p_nfe)
+--      Recebe o numero da NF-e e devolve o valor TOTAL daquela venda
+--      (soma de quantidade * preco_base de cada item).
+--      Justificativa: substitui consulta repetida toda vez que a tela
+--      precisa mostrar o "total da venda".  Encapsulamento + reuso.
+-- ---------------------------------------------------------------------
+DROP FUNCTION IF EXISTS fn_total_venda;
+DELIMITER $$
+CREATE FUNCTION fn_total_venda(p_nfe VARCHAR(44))
+    RETURNS DECIMAL(10,2)
+    READS SQL DATA
+BEGIN
+    DECLARE v_total DECIMAL(10,2);
+
+    SELECT COALESCE(SUM(vp.quantidade * p.preco_base), 0)
+    INTO   v_total
+    FROM   vende_produto vp
+    JOIN   produto       p ON p.codigo = vp.cod_produto
+    WHERE  vp.nfe = p_nfe;
+
+    RETURN v_total;
+END $$
+DELIMITER ;
+
+
+-- ---------------------------------------------------------------------
+-- 1.2  fn_porte_venda(p_nfe)  - usa IF/ELSEIF/ELSE
+--      Classifica uma venda em "GRANDE", "MEDIA" ou "PEQUENA"
+--      conforme o valor total dos itens.
+--      Justificativa: o porte de uma venda e usado em relatorios
+--      gerenciais.  Encapsular a regra em uma funcao evita
+--      duplicar a logica nas consultas e demonstra composicao de
+--      funcoes: fn_porte_venda reaproveita fn_total_venda em vez
+--      de recalcular o total na mao.  Usa apenas tabelas originais
+--      (vende_produto, produto), atraves de fn_total_venda.
+-- ---------------------------------------------------------------------
+DROP FUNCTION IF EXISTS fn_porte_venda;
+DELIMITER $$
+CREATE FUNCTION fn_porte_venda(p_nfe VARCHAR(44))
+    RETURNS VARCHAR(20)
+    READS SQL DATA
+BEGIN
+    DECLARE v_total DECIMAL(10,2);
+    DECLARE v_porte VARCHAR(20);
+
+    -- Reaproveita fn_total_venda para obter o total da venda
+    SET v_total = fn_total_venda(p_nfe);
+
+    -- Estrutura condicional (IF / ELSEIF / ELSE)
+    IF v_total >= 300 THEN
+        SET v_porte = 'GRANDE';
+    ELSEIF v_total >= 150 THEN
+        SET v_porte = 'MEDIA';
+    ELSE
+        SET v_porte = 'PEQUENA';
+    END IF;
+
+    RETURN v_porte;
+END $$
+DELIMITER ;
+
+
+-- =====================================================================
+-- 2) PROCEDIMENTOS (PROCEDURES)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 2.1  pr_atualizar_preco_departamento  -  procedimento de UPDATE
+--      Aumenta (ou diminui, se percentual negativo) o preco de TODOS
+--      os produtos de um determinado departamento.
+--      Justificativa: reajuste de preco por categoria e operacao
+--      muito comum em supermercado (ex: aumentar 10% em Bebidas).
+-- ---------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS pr_atualizar_preco_departamento;
+DELIMITER $$
+CREATE PROCEDURE pr_atualizar_preco_departamento(
+    IN p_cod_departamento VARCHAR(20),
+    IN p_percentual       DECIMAL(5,2)
+)
+BEGIN
+    UPDATE produto p
+    JOIN   departamento_produto dp ON dp.cod_produto = p.codigo
+    SET    p.preco_base = ROUND(p.preco_base * (1 + p_percentual/100), 2)
+    WHERE  dp.cod_departamento = p_cod_departamento;
+END $$
+DELIMITER ;
+
+
+-- ---------------------------------------------------------------------
+-- 2.2  pr_promocao_produtos_parados  -  procedimento com CURSOR
+--
+--      Por que CURSOR e necessario aqui?
+--      Para cada produto:
+--          1) calculamos o total ja vendido (SUM em vende_produto)
+--          2) com base nesse valor decidimos individualmente qual
+--             desconto aplicar (logica IF/ELSEIF por linha)
+--          3) atualizamos o preco_base daquele produto especifico
+--      Como a decisao "qual percentual aplicar" varia por produto e
+--      depende de um agregado calculado para cada um, o cursor e a
+--      forma natural de iterar linha a linha em PL/SQL.  Os
+--      parametros permitem ao usuario escolher os percentuais.
+--
+--      Usa SOMENTE tabelas originais (produto, vende_produto).
+-- ---------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS pr_promocao_produtos_parados;
+DELIMITER $$
+CREATE PROCEDURE pr_promocao_produtos_parados(
+    IN p_perc_sem_vendas  DECIMAL(5,2),
+    IN p_perc_pouca_venda DECIMAL(5,2)
+)
+BEGIN
+    DECLARE v_fim     INT DEFAULT 0;
+    DECLARE v_codigo  VARCHAR(20);
+    DECLARE v_qtd     INT;
+
+    -- Cursor que percorre todos os produtos
+    DECLARE cur_prods CURSOR FOR
+        SELECT codigo FROM produto;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_fim = 1;
+
+    OPEN cur_prods;
+
+    le_prods: LOOP
+        FETCH cur_prods INTO v_codigo;
+        IF v_fim = 1 THEN
+            LEAVE le_prods;
+        END IF;
+
+        -- Quantidade total ja vendida desse produto
+        SELECT COALESCE(SUM(quantidade), 0) INTO v_qtd
+        FROM   vende_produto
+        WHERE  cod_produto = v_codigo;
+
+        -- Decisao por linha (IF/ELSEIF dentro do loop)
+        IF v_qtd = 0 THEN
+            UPDATE produto
+            SET    preco_base = ROUND(preco_base * (1 - p_perc_sem_vendas/100), 2)
+            WHERE  codigo = v_codigo;
+        ELSEIF v_qtd <= 2 THEN
+            UPDATE produto
+            SET    preco_base = ROUND(preco_base * (1 - p_perc_pouca_venda/100), 2)
+            WHERE  codigo = v_codigo;
+        END IF;
+    END LOOP le_prods;
+
+    CLOSE cur_prods;
+END $$
+DELIMITER ;
+
+
+-- =====================================================================
+-- 3) TRIGGERS
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 3.1  tg_log_nova_venda  -  AFTER INSERT em vende
+--      Justificativa: toda vez que uma venda e registrada queremos
+--      manter um historico/auditoria em log_alteracoes.  Esse log
+--      ajuda a investigar problemas e e visualizado pela aplicacao
+--      na aba "Logs".
+-- ---------------------------------------------------------------------
+DROP TRIGGER IF EXISTS tg_log_nova_venda;
+DELIMITER $$
+CREATE TRIGGER tg_log_nova_venda
+AFTER INSERT ON vende
+FOR EACH ROW
+BEGIN
+    INSERT INTO log_alteracoes (tabela, tipo_evento, descricao)
+    VALUES (
+        'vende',
+        'INSERT',
+        CONCAT('Nova venda NF-e ', NEW.nfe,
+               ' registrada por ', NEW.matricula_func,
+               ' em ', NEW.data_venda)
+    );
+END $$
+DELIMITER ;
+
+
+-- ---------------------------------------------------------------------
+-- 3.2  tg_log_alteracao_preco  -  AFTER UPDATE em produto
+--      Justificativa: alteracoes de preco sao sensiveis (impactam
+--      vendas e o financeiro).  Registrar preco antigo e novo em log
+--      e essencial para auditoria.
+-- ---------------------------------------------------------------------
+DROP TRIGGER IF EXISTS tg_log_alteracao_preco;
+DELIMITER $$
+CREATE TRIGGER tg_log_alteracao_preco
+AFTER UPDATE ON produto
+FOR EACH ROW
+BEGIN
+    IF OLD.preco_base <> NEW.preco_base THEN
+        INSERT INTO log_alteracoes (tabela, tipo_evento, descricao)
+        VALUES (
+            'produto',
+            'UPDATE_PRECO',
+            CONCAT('Produto ', NEW.codigo,
+                   ' (', NEW.nome, ')',
+                   ' alterou preco de R$ ', OLD.preco_base,
+                   ' para R$ ',  NEW.preco_base)
+        );
+    END IF;
+END $$
+DELIMITER ;
