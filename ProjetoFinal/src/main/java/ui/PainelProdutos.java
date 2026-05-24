@@ -26,7 +26,8 @@ public class PainelProdutos extends JPanel {
 
     public PainelProdutos() {
         setLayout(new BorderLayout(5,5));
-        setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        setBorder(Tema.bordaPainel());
+        Tema.estilizarTabela(tabela);
 
         JButton btInserir   = new JButton("Inserir");
         JButton btEditar    = new JButton("Editar");

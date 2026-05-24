@@ -24,9 +24,12 @@ public class PainelConsultas extends JPanel {
 
     public PainelConsultas() {
         setLayout(new BorderLayout(5,5));
-        setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        setBorder(Tema.bordaPainel());
+        Tema.estilizarTabela(tabelaResultado);
 
-        JPanel painelBotoes = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        // GridLayout 2x3: altura previsivel; FlowLayout dentro de BorderLayout.NORTH
+        // cortava a segunda linha de botoes.
+        JPanel painelBotoes = new JPanel(new GridLayout(2, 3, 4, 4));
 
         JButton bt1 = new JButton("1.1  Func. com >1 venda (JOIN+GROUP+HAVING)");
         JButton bt2 = new JButton("1.2  Vendas do periodo (2 JOINs+WHERE)");
@@ -75,6 +78,7 @@ public class PainelConsultas extends JPanel {
     private void executar(ConsultaSql consulta) {
         try {
             tabelaResultado.setModel(TabelaUtil.construirModelo(consulta.executar()));
+            Tema.estilizarTabela(tabelaResultado);  // setModel reseta o header
         } catch (Exception ex) {
             JOptionPane.showMessageDialog(this, "Erro: " + ex.getMessage());
         }

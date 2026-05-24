@@ -23,7 +23,8 @@ public class PainelClientes extends JPanel {
 
     public PainelClientes() {
         setLayout(new BorderLayout(5,5));
-        setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        setBorder(Tema.bordaPainel());
+        Tema.estilizarTabela(tabela);
 
         // ---- Botoes -------------------------------------------------
         JButton btInserir   = new JButton("Inserir");

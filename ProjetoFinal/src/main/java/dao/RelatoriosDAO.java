@@ -2,7 +2,6 @@ package dao;
 
 import conexao.ConexaoBanco;
 import modelo.LogAlteracao;
-import modelo.ResumoFuncionario;
 
 import java.math.BigDecimal;
 import java.sql.CallableStatement;
@@ -26,7 +25,6 @@ import java.util.Map;
  *    - 2 funcoes  da Etapa 05
  *    - 2 procedimentos da Etapa 05
  *    - tabela de logs alimentada pelos triggers
- *    - tabela de resumo gerada pelo procedimento com cursor
  *    - consultas auxiliares para o dashboard
  *
  *  Cada metodo retorna um  List<Map<String,Object>>  (linha generica)
@@ -125,14 +123,19 @@ public class RelatoriosDAO {
         return BigDecimal.ZERO;
     }
 
-    /** Chama fn_categoria_funcionario(matricula). */
-    public String chamarFuncaoCategoriaFuncionario(String matricula) throws SQLException {
-        String sql = "SELECT fn_categoria_funcionario(?) AS categoria";
+    /**
+     * Chama fn_porte_venda(nfe).
+     *
+     *  Retorna "GRANDE", "MEDIA" ou "PEQUENA" conforme o valor total
+     *  da venda (a funcao reaproveita fn_total_venda internamente).
+     */
+    public String chamarFuncaoPorteVenda(String nfe) throws SQLException {
+        String sql = "SELECT fn_porte_venda(?) AS porte";
         try (Connection con   = ConexaoBanco.obterConexao();
              PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, matricula);
+            ps.setString(1, nfe);
             try (ResultSet rs = ps.executeQuery()) {
-                if (rs.next()) return rs.getString("categoria");
+                if (rs.next()) return rs.getString("porte");
             }
         }
         return null;
@@ -157,17 +160,27 @@ public class RelatoriosDAO {
         }
     }
 
-    /** Chama  pr_gerar_resumo_funcionarios()  (procedimento com CURSOR). */
-    public void chamarProcedimentoGerarResumo() throws SQLException {
-        String sql = "{ CALL pr_gerar_resumo_funcionarios() }";
+    /**
+     * Chama pr_promocao_produtos_parados(perc_sem_vendas, perc_pouca_venda)
+     * (procedimento com CURSOR).
+     *
+     *  Percorre todos os produtos e aplica desconto:
+     *   - produtos sem nenhuma venda  ->  desconto perc_sem_vendas
+     *   - produtos com ate 2 unidades vendidas  ->  desconto perc_pouca_venda
+     */
+    public void chamarProcedimentoPromocaoProdutosParados(BigDecimal percSemVendas,
+                                                          BigDecimal percPoucaVenda) throws SQLException {
+        String sql = "{ CALL pr_promocao_produtos_parados(?, ?) }";
         try (Connection con   = ConexaoBanco.obterConexao();
              CallableStatement cs = con.prepareCall(sql)) {
+            cs.setBigDecimal(1, percSemVendas);
+            cs.setBigDecimal(2, percPoucaVenda);
             cs.execute();
         }
     }
 
     /* ======================================================================
-     *               TABELAS ALIMENTADAS POR TRIGGER / PROCEDURE
+     *                  TABELAS ALIMENTADAS POR TRIGGER
      * ====================================================================== */
 
     /** Le os logs gerados por triggers (mais novos primeiro). */
@@ -193,122 +206,193 @@ public class RelatoriosDAO {
         return lista;
     }
 
-    /** Le a tabela de resumo gerada pelo procedimento com cursor. */
-    public List<ResumoFuncionario> listarResumoFuncionarios() throws SQLException {
-        List<ResumoFuncionario> lista = new ArrayList<>();
-        String sql = "SELECT matricula, nome, total_vendas, valor_total, " +
-                     "       classificacao, data_geracao " +
-                     "FROM   resumo_vendas_funcionario " +
-                     "ORDER BY total_vendas DESC, valor_total DESC";
+    /* ======================================================================
+     *                         CONSULTAS DO DASHBOARD
+     *
+     *  Os 5 graficos aceitam 4 filtros opcionais (qualquer um pode ser
+     *  null = sem filtro):
+     *    - dataIni / dataFim ("yyyy-MM-dd")
+     *    - cnpjFilial
+     *    - pagamento
+     *  Quando a propria dimensao do grafico e um dos filtros (ex: filial),
+     *  o filtro correspondente NAO e aplicado para evitar zerar a serie.
+     * ====================================================================== */
 
+    /** Lista os CNPJs das filiais para popular o combo de filtro. */
+    public List<String> listarCnpjsFiliais() throws SQLException {
+        List<String> lista = new ArrayList<>();
         try (Connection con = ConexaoBanco.obterConexao();
              Statement   st = con.createStatement();
-             ResultSet   rs = st.executeQuery(sql)) {
-
-            while (rs.next()) {
-                lista.add(new ResumoFuncionario(
-                        rs.getString("matricula"),
-                        rs.getString("nome"),
-                        rs.getInt("total_vendas"),
-                        rs.getBigDecimal("valor_total"),
-                        rs.getString("classificacao"),
-                        rs.getTimestamp("data_geracao").toLocalDateTime()
-                ));
-            }
+             ResultSet   rs = st.executeQuery("SELECT cnpj FROM filial ORDER BY cnpj")) {
+            while (rs.next()) lista.add(rs.getString("cnpj"));
         }
         return lista;
     }
 
-    /* ======================================================================
-     *                         CONSULTAS DO DASHBOARD
-     * ====================================================================== */
-
-    /** Quantidade de vendas por dia (para grafico de linha). */
-    public Map<String,Integer> dashboardVendasPorDia() throws SQLException {
-        Map<String,Integer> resultado = new LinkedHashMap<>();
-        String sql = "SELECT data_venda, COUNT(*) AS qtd " +
-                     "FROM   vende " +
-                     "GROUP BY data_venda ORDER BY data_venda";
+    /** Quantidade de vendas considerando os filtros (para indicador resumido). */
+    public int contarVendasFiltradas(String dataIni, String dataFim,
+                                     String cnpjFilial, String pagamento) throws SQLException {
+        StringBuilder sql = new StringBuilder(
+            "SELECT COUNT(*) AS qtd FROM vende v " +
+            "LEFT JOIN funcionario f ON f.matricula = v.matricula_func");
+        List<Object> params = new ArrayList<>();
+        aplicarFiltrosVende(sql, params, dataIni, dataFim, cnpjFilial, pagamento);
 
         try (Connection con = ConexaoBanco.obterConexao();
-             Statement   st = con.createStatement();
-             ResultSet   rs = st.executeQuery(sql)) {
-            while (rs.next()) {
-                resultado.put(rs.getDate("data_venda").toString(), rs.getInt("qtd"));
+             PreparedStatement ps = con.prepareStatement(sql.toString())) {
+            bindParams(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) return rs.getInt("qtd");
+            }
+        }
+        return 0;
+    }
+
+    /** Vendas por dia (linha) com filtros. */
+    public Map<String,Integer> dashboardVendasPorDia(String dataIni, String dataFim,
+                                                     String cnpjFilial, String pagamento) throws SQLException {
+        StringBuilder sql = new StringBuilder(
+            "SELECT v.data_venda, COUNT(*) AS qtd FROM vende v " +
+            "LEFT JOIN funcionario f ON f.matricula = v.matricula_func");
+        List<Object> params = new ArrayList<>();
+        aplicarFiltrosVende(sql, params, dataIni, dataFim, cnpjFilial, pagamento);
+        sql.append(" GROUP BY v.data_venda ORDER BY v.data_venda");
+
+        Map<String,Integer> resultado = new LinkedHashMap<>();
+        try (Connection con = ConexaoBanco.obterConexao();
+             PreparedStatement ps = con.prepareStatement(sql.toString())) {
+            bindParams(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) resultado.put(rs.getDate("data_venda").toString(), rs.getInt("qtd"));
             }
         }
         return resultado;
     }
 
-    /** Quantidade de vendas por forma de pagamento (para grafico de pizza). */
-    public Map<String,Integer> dashboardVendasPorPagamento() throws SQLException {
-        Map<String,Integer> resultado = new LinkedHashMap<>();
-        String sql = "SELECT pagamento, COUNT(*) AS qtd " +
-                     "FROM   vende GROUP BY pagamento";
+    /**
+     * Vendas por forma de pagamento (pizza).
+     * Nao filtra por pagamento (essa e a dimensao do grafico).
+     */
+    public Map<String,Integer> dashboardVendasPorPagamento(String dataIni, String dataFim,
+                                                            String cnpjFilial) throws SQLException {
+        StringBuilder sql = new StringBuilder(
+            "SELECT v.pagamento, COUNT(*) AS qtd FROM vende v " +
+            "LEFT JOIN funcionario f ON f.matricula = v.matricula_func");
+        List<Object> params = new ArrayList<>();
+        aplicarFiltrosVende(sql, params, dataIni, dataFim, cnpjFilial, null);
+        sql.append(" GROUP BY v.pagamento");
 
+        Map<String,Integer> resultado = new LinkedHashMap<>();
         try (Connection con = ConexaoBanco.obterConexao();
-             Statement   st = con.createStatement();
-             ResultSet   rs = st.executeQuery(sql)) {
-            while (rs.next()) {
-                resultado.put(rs.getString("pagamento"), rs.getInt("qtd"));
+             PreparedStatement ps = con.prepareStatement(sql.toString())) {
+            bindParams(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) resultado.put(rs.getString("pagamento"), rs.getInt("qtd"));
             }
         }
         return resultado;
     }
 
-    /** Top 5 produtos mais vendidos (em quantidade). */
-    public Map<String,Integer> dashboardTopProdutos() throws SQLException {
-        Map<String,Integer> resultado = new LinkedHashMap<>();
-        String sql = "SELECT p.nome, SUM(vp.quantidade) AS total " +
-                     "FROM   vende_produto vp " +
-                     "JOIN   produto p ON p.codigo = vp.cod_produto " +
-                     "GROUP BY p.nome ORDER BY total DESC LIMIT 5";
+    /** Top 5 produtos mais vendidos com filtros. */
+    public Map<String,Integer> dashboardTopProdutos(String dataIni, String dataFim,
+                                                    String cnpjFilial, String pagamento) throws SQLException {
+        StringBuilder sql = new StringBuilder(
+            "SELECT p.nome, SUM(vp.quantidade) AS total " +
+            "FROM vende_produto vp " +
+            "JOIN produto p ON p.codigo = vp.cod_produto " +
+            "JOIN vende   v ON v.nfe    = vp.nfe " +
+            "LEFT JOIN funcionario f ON f.matricula = v.matricula_func");
+        List<Object> params = new ArrayList<>();
+        aplicarFiltrosVende(sql, params, dataIni, dataFim, cnpjFilial, pagamento);
+        sql.append(" GROUP BY p.nome ORDER BY total DESC LIMIT 5");
 
+        Map<String,Integer> resultado = new LinkedHashMap<>();
         try (Connection con = ConexaoBanco.obterConexao();
-             Statement   st = con.createStatement();
-             ResultSet   rs = st.executeQuery(sql)) {
-            while (rs.next()) {
-                resultado.put(rs.getString("nome"), rs.getInt("total"));
+             PreparedStatement ps = con.prepareStatement(sql.toString())) {
+            bindParams(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) resultado.put(rs.getString("nome"), rs.getInt("total"));
             }
         }
         return resultado;
     }
 
-    /** Vendas por funcionario (barras). */
-    public Map<String,Integer> dashboardVendasPorFuncionario() throws SQLException {
-        Map<String,Integer> resultado = new LinkedHashMap<>();
-        String sql = "SELECT f.nome, COUNT(v.nfe) AS qtd " +
-                     "FROM   funcionario f " +
-                     "LEFT JOIN vende v ON v.matricula_func = f.matricula " +
-                     "GROUP BY f.nome HAVING qtd > 0 ORDER BY qtd DESC LIMIT 10";
+    /** Vendas por funcionario (barras) com filtros. */
+    public Map<String,Integer> dashboardVendasPorFuncionario(String dataIni, String dataFim,
+                                                              String cnpjFilial, String pagamento) throws SQLException {
+        StringBuilder sql = new StringBuilder(
+            "SELECT f.nome, COUNT(v.nfe) AS qtd " +
+            "FROM funcionario f " +
+            "JOIN vende v ON v.matricula_func = f.matricula");
+        List<Object> params = new ArrayList<>();
+        aplicarFiltrosVende(sql, params, dataIni, dataFim, cnpjFilial, pagamento);
+        sql.append(" GROUP BY f.nome HAVING COUNT(v.nfe) > 0 ORDER BY COUNT(v.nfe) DESC LIMIT 10");
 
+        Map<String,Integer> resultado = new LinkedHashMap<>();
         try (Connection con = ConexaoBanco.obterConexao();
-             Statement   st = con.createStatement();
-             ResultSet   rs = st.executeQuery(sql)) {
-            while (rs.next()) {
-                resultado.put(rs.getString("nome"), rs.getInt("qtd"));
+             PreparedStatement ps = con.prepareStatement(sql.toString())) {
+            bindParams(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) resultado.put(rs.getString("nome"), rs.getInt("qtd"));
             }
         }
         return resultado;
     }
 
-    /** Vendas por filial (atraves do funcionario que registrou). */
-    public Map<String,Integer> dashboardVendasPorFilial() throws SQLException {
-        Map<String,Integer> resultado = new LinkedHashMap<>();
-        String sql = "SELECT fi.cnpj, COUNT(v.nfe) AS qtd " +
-                     "FROM   filial fi " +
-                     "LEFT JOIN funcionario fu ON fu.cnpj_filial = fi.cnpj " +
-                     "LEFT JOIN vende       v  ON v.matricula_func = fu.matricula " +
-                     "GROUP BY fi.cnpj HAVING qtd > 0";
+    /**
+     * Vendas por filial (barras) com filtros.
+     * Nao filtra por filial (essa e a dimensao do grafico).
+     */
+    public Map<String,Integer> dashboardVendasPorFilial(String dataIni, String dataFim,
+                                                        String pagamento) throws SQLException {
+        StringBuilder sql = new StringBuilder(
+            "SELECT fi.cnpj, COUNT(v.nfe) AS qtd " +
+            "FROM filial fi " +
+            "LEFT JOIN funcionario f ON f.cnpj_filial = fi.cnpj " +
+            "LEFT JOIN vende       v ON v.matricula_func = f.matricula");
+        List<Object> params = new ArrayList<>();
+        aplicarFiltrosVende(sql, params, dataIni, dataFim, null, pagamento);
+        sql.append(" GROUP BY fi.cnpj HAVING COUNT(v.nfe) > 0");
 
+        Map<String,Integer> resultado = new LinkedHashMap<>();
         try (Connection con = ConexaoBanco.obterConexao();
-             Statement   st = con.createStatement();
-             ResultSet   rs = st.executeQuery(sql)) {
-            while (rs.next()) {
-                resultado.put(rs.getString("cnpj"), rs.getInt("qtd"));
+             PreparedStatement ps = con.prepareStatement(sql.toString())) {
+            bindParams(ps, params);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) resultado.put(rs.getString("cnpj"), rs.getInt("qtd"));
             }
         }
         return resultado;
+    }
+
+    /** Helper privado: monta as clausulas WHERE conforme filtros nao-nulos. */
+    private void aplicarFiltrosVende(StringBuilder sql, List<Object> params,
+                                     String dataIni, String dataFim,
+                                     String cnpjFilial, String pagamento) {
+        List<String> wheres = new ArrayList<>();
+        if (dataIni != null && dataFim != null) {
+            wheres.add("v.data_venda BETWEEN ? AND ?");
+            params.add(dataIni);
+            params.add(dataFim);
+        }
+        if (cnpjFilial != null) {
+            wheres.add("f.cnpj_filial = ?");
+            params.add(cnpjFilial);
+        }
+        if (pagamento != null) {
+            wheres.add("v.pagamento = ?");
+            params.add(pagamento);
+        }
+        if (!wheres.isEmpty()) {
+            sql.append(" WHERE ").append(String.join(" AND ", wheres));
+        }
+    }
+
+    /** Helper privado: aplica os parametros posicionais no PreparedStatement. */
+    private void bindParams(PreparedStatement ps, List<Object> params) throws SQLException {
+        for (int i = 0; i < params.size(); i++) {
+            ps.setObject(i + 1, params.get(i));
+        }
     }
 
     /* ----------------------- INDICADORES NUMERICOS ----------------------- */

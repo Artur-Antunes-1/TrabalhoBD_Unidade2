@@ -22,15 +22,18 @@ public class PainelLogs extends JPanel {
 
     public PainelLogs() {
         setLayout(new BorderLayout(5,5));
-        setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        setBorder(Tema.bordaPainel());
 
         JButton btAtualizar = new JButton("Atualizar logs");
         JPanel  topo = new JPanel(new FlowLayout(FlowLayout.LEFT));
         topo.add(new JLabel("Logs gerados pelos triggers tg_log_nova_venda e tg_log_alteracao_preco:"));
         topo.add(btAtualizar);
 
+        JTable tabela = new JTable(modelo);
+        Tema.estilizarTabela(tabela);
+
         add(topo, BorderLayout.NORTH);
-        add(new JScrollPane(new JTable(modelo)), BorderLayout.CENTER);
+        add(new JScrollPane(tabela), BorderLayout.CENTER);
 
         btAtualizar.addActionListener(e -> recarregar());
         recarregar();

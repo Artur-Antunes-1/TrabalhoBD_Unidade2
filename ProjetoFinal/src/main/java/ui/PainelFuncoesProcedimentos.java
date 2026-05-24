@@ -1,13 +1,10 @@
 package ui;
 
 import dao.RelatoriosDAO;
-import modelo.ResumoFuncionario;
 
 import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.math.BigDecimal;
-import java.util.List;
 
 /**
  * Painel "Funcoes e Procedimentos" - executa as funcoes e procedimentos
@@ -17,14 +14,10 @@ public class PainelFuncoesProcedimentos extends JPanel {
 
     private final RelatoriosDAO dao = new RelatoriosDAO();
     private final JTextArea areaSaida = new JTextArea();
-    private final DefaultTableModel modeloResumo = new DefaultTableModel(
-            new String[]{"Matricula","Nome","Total Vendas","Valor Total","Classificacao","Gerado em"}, 0) {
-        @Override public boolean isCellEditable(int r, int c) { return false; }
-    };
 
     public PainelFuncoesProcedimentos() {
         setLayout(new BorderLayout(5,5));
-        setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        setBorder(Tema.bordaPainel());
 
         // ============ FUNCOES ============================================
         JPanel painelFuncoes = new JPanel(new GridLayout(0, 1, 4, 4));
@@ -39,13 +32,13 @@ public class PainelFuncoesProcedimentos extends JPanel {
         linha1.add(btTotal);
         painelFuncoes.add(linha1);
 
-        // ---- fn_categoria_funcionario(matricula)  [usa IF/ELSE]
+        // ---- fn_porte_venda(nfe)  [usa IF/ELSEIF/ELSE  -  reaproveita fn_total_venda]
         JPanel linha2 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JTextField campoMat = new JTextField("FUNC004", 10);
-        JButton btCat = new JButton("fn_categoria_funcionario(matricula) ->");
-        linha2.add(new JLabel("Matricula:"));
-        linha2.add(campoMat);
-        linha2.add(btCat);
+        JTextField campoNfePorte = new JTextField("NFE0000000001", 14);
+        JButton btPorte = new JButton("fn_porte_venda(nfe) ->");
+        linha2.add(new JLabel("NF-e:"));
+        linha2.add(campoNfePorte);
+        linha2.add(btPorte);
         painelFuncoes.add(linha2);
 
         // ============ PROCEDIMENTOS ======================================
@@ -64,10 +57,16 @@ public class PainelFuncoesProcedimentos extends JPanel {
         linha3.add(btUpdate);
         painelProcs.add(linha3);
 
-        // ---- pr_gerar_resumo_funcionarios()  [CURSOR]
+        // ---- pr_promocao_produtos_parados(% sem venda, % pouca venda)  [CURSOR]
         JPanel linha4 = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        JButton btResumo = new JButton("pr_gerar_resumo_funcionarios()  [CURSOR]");
-        linha4.add(btResumo);
+        JTextField campoPercSem    = new JTextField("15", 5);
+        JTextField campoPercPouca  = new JTextField("5",  5);
+        JButton    btPromocao      = new JButton("pr_promocao_produtos_parados(% sem, % pouca)  [CURSOR]");
+        linha4.add(new JLabel("% sem venda:"));
+        linha4.add(campoPercSem);
+        linha4.add(new JLabel("% pouca venda:"));
+        linha4.add(campoPercPouca);
+        linha4.add(btPromocao);
         painelProcs.add(linha4);
 
         // ---- topo
@@ -77,18 +76,11 @@ public class PainelFuncoesProcedimentos extends JPanel {
 
         // ============ SAIDA ==============================================
         areaSaida.setEditable(false);
-        areaSaida.setRows(4);
-        areaSaida.setBorder(BorderFactory.createTitledBorder("Saida das funcoes"));
+        areaSaida.setRows(10);
+        areaSaida.setBorder(BorderFactory.createTitledBorder("Saida das funcoes / procedimentos"));
 
-        JTable tabelaResumo = new JTable(modeloResumo);
-        tabelaResumo.setBorder(BorderFactory.createTitledBorder("Resumo gerado pelo CURSOR"));
-
-        JPanel centro = new JPanel(new BorderLayout(4,4));
-        centro.add(new JScrollPane(areaSaida), BorderLayout.NORTH);
-        centro.add(new JScrollPane(tabelaResumo), BorderLayout.CENTER);
-
-        add(topo,   BorderLayout.NORTH);
-        add(centro, BorderLayout.CENTER);
+        add(topo, BorderLayout.NORTH);
+        add(new JScrollPane(areaSaida), BorderLayout.CENTER);
 
         // ============ ACOES ==============================================
         btTotal.addActionListener(e -> {
@@ -100,10 +92,10 @@ public class PainelFuncoesProcedimentos extends JPanel {
             }
         });
 
-        btCat.addActionListener(e -> {
+        btPorte.addActionListener(e -> {
             try {
-                String cat = dao.chamarFuncaoCategoriaFuncionario(campoMat.getText().trim());
-                anexarSaida("fn_categoria_funcionario(" + campoMat.getText().trim() + ") = " + cat);
+                String porte = dao.chamarFuncaoPorteVenda(campoNfePorte.getText().trim());
+                anexarSaida("fn_porte_venda(" + campoNfePorte.getText().trim() + ") = " + porte);
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Erro: " + ex.getMessage());
             }
@@ -120,36 +112,21 @@ public class PainelFuncoesProcedimentos extends JPanel {
             }
         });
 
-        btResumo.addActionListener(e -> {
+        btPromocao.addActionListener(e -> {
             try {
-                dao.chamarProcedimentoGerarResumo();
-                carregarResumo();
-                anexarSaida("Procedimento pr_gerar_resumo_funcionarios executado.");
+                BigDecimal percSem   = new BigDecimal(campoPercSem.getText().trim());
+                BigDecimal percPouca = new BigDecimal(campoPercPouca.getText().trim());
+                dao.chamarProcedimentoPromocaoProdutosParados(percSem, percPouca);
+                anexarSaida("Procedimento pr_promocao_produtos_parados executado: "
+                        + percSem + "% para sem vendas, " + percPouca + "% para pouca venda.");
             } catch (Exception ex) {
                 JOptionPane.showMessageDialog(this, "Erro: " + ex.getMessage());
             }
         });
-
-        // Carrega o resumo se ja existir
-        carregarResumo();
     }
 
     private void anexarSaida(String texto) {
         areaSaida.append(texto + "\n");
         areaSaida.setCaretPosition(areaSaida.getDocument().getLength());
-    }
-
-    private void carregarResumo() {
-        try {
-            List<ResumoFuncionario> lista = dao.listarResumoFuncionarios();
-            modeloResumo.setRowCount(0);
-            for (ResumoFuncionario r : lista) {
-                modeloResumo.addRow(new Object[]{
-                        r.getMatricula(), r.getNome(), r.getTotalVendas(),
-                        r.getValorTotal(), r.getClassificacao(), r.getDataGeracao()});
-            }
-        } catch (Exception ex) {
-            JOptionPane.showMessageDialog(this, "Erro: " + ex.getMessage());
-        }
     }
 }

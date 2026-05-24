@@ -1,5 +1,6 @@
 import conexao.ConexaoBanco;
 import ui.JanelaPrincipal;
+import ui.Tema;
 
 import javax.swing.*;
 import java.sql.Connection;
@@ -17,6 +18,9 @@ import java.sql.Connection;
 public class Principal {
 
     public static void main(String[] args) {
+        // Aplica L&F Nimbus + tipografia padronizada (precisa vir antes de criar JFrames)
+        Tema.aplicar();
+
         // Teste rapido de conexao com mensagem amigavel se falhar
         try (Connection c = ConexaoBanco.obterConexao()) {
             System.out.println("[OK] Conexao com o banco estabelecida.");

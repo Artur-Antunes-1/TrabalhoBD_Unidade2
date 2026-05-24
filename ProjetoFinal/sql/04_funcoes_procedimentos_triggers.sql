@@ -1,7 +1,51 @@
 -- =====================================================================
--- ETAPA 05  -  Funcoes, Procedimentos e Triggers
+-- BANCO DE DADOS - 2026.1
+-- Projeto Pratico  -  MODULO 02  -  ETAPA 05
+-- Tema: Supermercado BD
+-- Grupo: Artur Antunes, Pedro Ferraz, Ricardo Machado, Victor Uen
+-- SGBD: MySQL 8.0+
+--
+-- Conteudo desta entrega (Etapa 05):
+--   1) 02 FUNCOES (FUNCTIONS) com justificativa:
+--       1.1  fn_total_venda(p_nfe)              - SELECT + SUM
+--       1.2  fn_porte_venda(p_nfe)              - IF / ELSEIF / ELSE
+--                                                 (reaproveita fn_total_venda)
+--   2) 02 PROCEDIMENTOS (PROCEDURES) com justificativa:
+--       2.1  pr_atualizar_preco_departamento    - UPDATE em massa
+--       2.2  pr_promocao_produtos_parados       - CURSOR sobre produto
+--   3) 02 TRIGGERS com justificativa:
+--       3.1  tg_log_nova_venda                  - AFTER INSERT em vende
+--       3.2  tg_log_alteracao_preco             - AFTER UPDATE em produto
+--   4) TABELAS DE APOIO usadas pelos triggers:
+--       - log_alteracoes              (alimentada pelos triggers)
+--
+-- Pre-requisito: este script assume que o banco "supermercado", as 13
+-- tabelas do esquema relacional e os dados de povoamento ja foram
+-- criados conforme a Entrega 03 (MOD 01).
 -- =====================================================================
+
 USE supermercado;
+
+
+-- =====================================================================
+-- 0) TABELAS DE APOIO
+--    Sao criadas aqui porque so existem em funcao desta etapa:
+--    log_alteracoes armazena os registros gerados pelos triggers.
+--    Usamos IF NOT EXISTS para que o script seja idempotente e nao
+--    conflite caso a tabela ja tenha sido criada previamente.
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- 0.1  log_alteracoes  -  alimentada pelos triggers
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS log_alteracoes (
+    id          INT AUTO_INCREMENT PRIMARY KEY,
+    tabela      VARCHAR(50)  NOT NULL,
+    tipo_evento VARCHAR(50)  NOT NULL,
+    descricao   VARCHAR(500) NOT NULL,
+    data_hora   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 
 -- =====================================================================
 -- 1) FUNCOES (FUNCTIONS)
@@ -18,7 +62,6 @@ DROP FUNCTION IF EXISTS fn_total_venda;
 DELIMITER $$
 CREATE FUNCTION fn_total_venda(p_nfe VARCHAR(44))
     RETURNS DECIMAL(10,2)
-    DETERMINISTIC
     READS SQL DATA
 BEGIN
     DECLARE v_total DECIMAL(10,2);
@@ -35,36 +78,38 @@ DELIMITER ;
 
 
 -- ---------------------------------------------------------------------
--- 1.2  fn_categoria_funcionario(p_matricula)  - usa IF/ELSE
---      Classifica o funcionario em "Ouro", "Prata" ou "Bronze"
---      conforme o numero de vendas registradas.
---      Justificativa: a regra de negocio de premiacao precisa estar
---      no banco para ser aplicada por triggers, procedimentos e telas.
+-- 1.2  fn_porte_venda(p_nfe)  - usa IF/ELSEIF/ELSE
+--      Classifica uma venda em "GRANDE", "MEDIA" ou "PEQUENA"
+--      conforme o valor total dos itens.
+--      Justificativa: o porte de uma venda e usado em relatorios
+--      gerenciais.  Encapsular a regra em uma funcao evita
+--      duplicar a logica nas consultas e demonstra composicao de
+--      funcoes: fn_porte_venda reaproveita fn_total_venda em vez
+--      de recalcular o total na mao.  Usa apenas tabelas originais
+--      (vende_produto, produto), atraves de fn_total_venda.
 -- ---------------------------------------------------------------------
-DROP FUNCTION IF EXISTS fn_categoria_funcionario;
+DROP FUNCTION IF EXISTS fn_porte_venda;
 DELIMITER $$
-CREATE FUNCTION fn_categoria_funcionario(p_matricula VARCHAR(20))
+CREATE FUNCTION fn_porte_venda(p_nfe VARCHAR(44))
     RETURNS VARCHAR(20)
-    DETERMINISTIC
     READS SQL DATA
 BEGIN
-    DECLARE v_qtd_vendas INT DEFAULT 0;
-    DECLARE v_categoria  VARCHAR(20);
+    DECLARE v_total DECIMAL(10,2);
+    DECLARE v_porte VARCHAR(20);
 
-    SELECT COUNT(*) INTO v_qtd_vendas
-    FROM   vende
-    WHERE  matricula_func = p_matricula;
+    -- Reaproveita fn_total_venda para obter o total da venda
+    SET v_total = fn_total_venda(p_nfe);
 
     -- Estrutura condicional (IF / ELSEIF / ELSE)
-    IF v_qtd_vendas >= 5 THEN
-        SET v_categoria = 'Ouro';
-    ELSEIF v_qtd_vendas >= 2 THEN
-        SET v_categoria = 'Prata';
+    IF v_total >= 300 THEN
+        SET v_porte = 'GRANDE';
+    ELSEIF v_total >= 150 THEN
+        SET v_porte = 'MEDIA';
     ELSE
-        SET v_categoria = 'Bronze';
+        SET v_porte = 'PEQUENA';
     END IF;
 
-    RETURN v_categoria;
+    RETURN v_porte;
 END $$
 DELIMITER ;
 
@@ -96,69 +141,64 @@ DELIMITER ;
 
 
 -- ---------------------------------------------------------------------
--- 2.2  pr_gerar_resumo_funcionarios  -  procedimento com CURSOR
+-- 2.2  pr_promocao_produtos_parados  -  procedimento com CURSOR
 --
 --      Por que CURSOR e necessario aqui?
---      Para cada funcionario nos:
---          1) calculamos o total de vendas (count e valor)
---          2) chamamos a funcao fn_categoria_funcionario
---          3) inserimos UMA linha na tabela resumo_vendas_funcionario
---      Como cada iteracao gera uma linha NOVA na tabela de resumo
---      (e nao um UPDATE em uma tabela existente), um simples UPDATE
---      nao resolveria.  A logica precisa ser por linha, e o cursor
---      e a forma natural de iterar linha a linha em PL/SQL.
+--      Para cada produto:
+--          1) calculamos o total ja vendido (SUM em vende_produto)
+--          2) com base nesse valor decidimos individualmente qual
+--             desconto aplicar (logica IF/ELSEIF por linha)
+--          3) atualizamos o preco_base daquele produto especifico
+--      Como a decisao "qual percentual aplicar" varia por produto e
+--      depende de um agregado calculado para cada um, o cursor e a
+--      forma natural de iterar linha a linha em PL/SQL.  Os
+--      parametros permitem ao usuario escolher os percentuais.
+--
+--      Usa SOMENTE tabelas originais (produto, vende_produto).
 -- ---------------------------------------------------------------------
-DROP PROCEDURE IF EXISTS pr_gerar_resumo_funcionarios;
+DROP PROCEDURE IF EXISTS pr_promocao_produtos_parados;
 DELIMITER $$
-CREATE PROCEDURE pr_gerar_resumo_funcionarios()
+CREATE PROCEDURE pr_promocao_produtos_parados(
+    IN p_perc_sem_vendas  DECIMAL(5,2),
+    IN p_perc_pouca_venda DECIMAL(5,2)
+)
 BEGIN
-    DECLARE v_fim         INT DEFAULT 0;
-    DECLARE v_matricula   VARCHAR(20);
-    DECLARE v_nome        VARCHAR(100);
-    DECLARE v_qtd_vendas  INT;
-    DECLARE v_valor_total DECIMAL(10,2);
-    DECLARE v_categoria   VARCHAR(20);
+    DECLARE v_fim     INT DEFAULT 0;
+    DECLARE v_codigo  VARCHAR(20);
+    DECLARE v_qtd     INT;
 
-    -- Cursor que percorre todos os funcionarios
-    DECLARE cur_funcs CURSOR FOR
-        SELECT matricula, nome FROM funcionario;
+    -- Cursor que percorre todos os produtos
+    DECLARE cur_prods CURSOR FOR
+        SELECT codigo FROM produto;
 
     DECLARE CONTINUE HANDLER FOR NOT FOUND SET v_fim = 1;
 
-    -- Limpa o resumo anterior antes de regerar
-    DELETE FROM resumo_vendas_funcionario;
+    OPEN cur_prods;
 
-    OPEN cur_funcs;
-
-    le_funcs: LOOP
-        FETCH cur_funcs INTO v_matricula, v_nome;
+    le_prods: LOOP
+        FETCH cur_prods INTO v_codigo;
         IF v_fim = 1 THEN
-            LEAVE le_funcs;
+            LEAVE le_prods;
         END IF;
 
-        -- 1) Quantidade de vendas
-        SELECT COUNT(*) INTO v_qtd_vendas
-        FROM   vende
-        WHERE  matricula_func = v_matricula;
+        -- Quantidade total ja vendida desse produto
+        SELECT COALESCE(SUM(quantidade), 0) INTO v_qtd
+        FROM   vende_produto
+        WHERE  cod_produto = v_codigo;
 
-        -- 2) Valor total movimentado por esse funcionario
-        SELECT COALESCE(SUM(vp.quantidade * p.preco_base), 0)
-        INTO   v_valor_total
-        FROM   vende v
-        JOIN   vende_produto vp ON vp.nfe = v.nfe
-        JOIN   produto       p  ON p.codigo = vp.cod_produto
-        WHERE  v.matricula_func = v_matricula;
+        -- Decisao por linha (IF/ELSEIF dentro do loop)
+        IF v_qtd = 0 THEN
+            UPDATE produto
+            SET    preco_base = ROUND(preco_base * (1 - p_perc_sem_vendas/100), 2)
+            WHERE  codigo = v_codigo;
+        ELSEIF v_qtd <= 2 THEN
+            UPDATE produto
+            SET    preco_base = ROUND(preco_base * (1 - p_perc_pouca_venda/100), 2)
+            WHERE  codigo = v_codigo;
+        END IF;
+    END LOOP le_prods;
 
-        -- 3) Reaproveita a funcao para classificar
-        SET v_categoria = fn_categoria_funcionario(v_matricula);
-
-        INSERT INTO resumo_vendas_funcionario
-            (matricula, nome, total_vendas, valor_total, classificacao)
-        VALUES
-            (v_matricula, v_nome, v_qtd_vendas, v_valor_total, v_categoria);
-    END LOOP le_funcs;
-
-    CLOSE cur_funcs;
+    CLOSE cur_prods;
 END $$
 DELIMITER ;
 

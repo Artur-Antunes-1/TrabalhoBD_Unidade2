@@ -109,7 +109,7 @@ java  -cp "out;lib/*" Principal
 | Filiais                   | CRUD da tabela `filial`                                                                    |
 | Vendas                    | CRUD da tabela `vende` *(inserir dispara o trigger de log)* + adicionar itens              |
 | Consultas/Views           | Executa as 4 consultas e 2 views da Etapa 04                                               |
-| Funções/Procedimentos     | Chama `fn_total_venda`, `fn_categoria_funcionario`, `pr_atualizar_preco_departamento`, `pr_gerar_resumo_funcionarios` |
+| Funções/Procedimentos     | Chama `fn_total_venda`, `fn_porte_venda`, `pr_atualizar_preco_departamento`, `pr_promocao_produtos_parados` |
 | Logs (Triggers)           | Mostra a tabela `log_alteracoes` (alimentada pelos dois triggers)                          |
 | Dashboard                 | Indicadores (totais, média) + 5 gráficos (barras, pizza, linha)                            |
 

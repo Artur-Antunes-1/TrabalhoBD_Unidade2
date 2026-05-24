@@ -232,29 +232,33 @@ Arquivo: **`sql/04_funcoes_procedimentos_triggers.sql`**.
 
 ### 5.1  Funções
 
-| Função                          | O que retorna                          | Estrutura especial         |
-|---------------------------------|----------------------------------------|----------------------------|
-| `fn_total_venda(nfe)`           | DECIMAL — total de uma venda           | só `SELECT SUM(...)`       |
-| `fn_categoria_funcionario(mat)` | VARCHAR — "Ouro" / "Prata" / "Bronze" | **IF / ELSEIF / ELSE**     |
+| Função                  | O que retorna                                  | Estrutura especial         |
+|-------------------------|------------------------------------------------|----------------------------|
+| `fn_total_venda(nfe)`   | DECIMAL — total de uma venda                   | só `SELECT SUM(...)`       |
+| `fn_porte_venda(nfe)`   | VARCHAR — "GRANDE" / "MEDIA" / "PEQUENA"       | **IF / ELSEIF / ELSE** (reaproveita `fn_total_venda`) |
 
 > **Como explicar função:** "Função sempre devolve um valor (RETURN). Pode ser usada dentro de um SELECT como se fosse uma coluna calculada."
 
-> **A regra do `fn_categoria_funcionario`:**
->   - vendas ≥ 5  → Ouro
->   - vendas ≥ 2  → Prata
->   - menos      → Bronze
+> **A regra do `fn_porte_venda`:**
+>   - total ≥ 300 → GRANDE
+>   - total ≥ 150 → MEDIA
+>   - menos      → PEQUENA
+>
+> **Composição de funções:** `fn_porte_venda` chama `fn_total_venda` internamente em vez de duplicar o `SUM`. Isso mostra reuso de função dentro de função.
 
 ### 5.2  Procedimentos
 
-| Procedimento                          | O que faz                                                          | Tipo     |
-|---------------------------------------|--------------------------------------------------------------------|----------|
-| `pr_atualizar_preco_departamento(d, p)` | UPDATE em todos os produtos do departamento, multiplicando preço por (1 + p%) | UPDATE   |
-| `pr_gerar_resumo_funcionarios()`      | Para CADA funcionário, calcula total de vendas, soma de valor e classificação. Insere uma linha em `resumo_vendas_funcionario`. | **CURSOR** |
+| Procedimento                                 | O que faz                                                          | Tipo     |
+|----------------------------------------------|--------------------------------------------------------------------|----------|
+| `pr_atualizar_preco_departamento(d, p)`      | UPDATE em todos os produtos do departamento, multiplicando preço por (1 + p%) | UPDATE   |
+| `pr_promocao_produtos_parados(p_sem, p_pouca)` | Percorre cada produto, calcula o quanto já foi vendido e aplica desconto individual: `p_sem`% para produtos sem nenhuma venda e `p_pouca`% para produtos com até 2 unidades vendidas. | **CURSOR** |
 
-> **Por que precisa de cursor em `pr_gerar_resumo_funcionarios`?**
-> Porque a saída é UMA linha por funcionário em uma TABELA NOVA, com cálculo
-> próprio por linha (chamando uma função para classificar). Um único UPDATE
-> não consegue gerar uma tabela de resumo nova com lógica linha a linha.
+> **Por que precisa de cursor em `pr_promocao_produtos_parados`?**
+> Porque a decisão é **por produto**: o desconto a aplicar depende de um
+> agregado (`SUM(quantidade)`) calculado para CADA produto, e em seguida
+> faz-se um UPDATE com percentual diferente conforme o resultado. Um único
+> UPDATE com `CASE` não conseguiria, porque dependemos de uma agregação
+> calculada linha-a-linha durante a iteração.
 >
 > **Como explicar cursor:** "É um ponteiro de iteração sobre o resultado de
 > uma query. Você abre o cursor, faz FETCH para pegar a próxima linha em
@@ -294,9 +298,9 @@ Cada painel tem botões **Inserir**, **Editar**, **Excluir**, **Atualizar lista*
 
 - Aba **Funções/Procedimentos** chama:
   - `fn_total_venda(?)` via `SELECT fn_total_venda(?)` (PreparedStatement).
-  - `fn_categoria_funcionario(?)` da mesma forma.
+  - `fn_porte_venda(?)` da mesma forma.
   - `pr_atualizar_preco_departamento(?, ?)` via `CallableStatement` (`{ CALL pr_xxx(?, ?) }`).
-  - `pr_gerar_resumo_funcionarios()` via `CallableStatement`.
+  - `pr_promocao_produtos_parados(?, ?)` via `CallableStatement`.
 - Aba **Logs** mostra a tabela `log_alteracoes`, alimentada pelos triggers.
 
 > **Sobre `CallableStatement`:** "É a forma JDBC pura de chamar PROCEDURE. A sintaxe `{ CALL nome(?, ?) }` é o padrão JDBC para invocação de procedimentos no banco."
@@ -356,11 +360,11 @@ Botão **Atualizar dashboard** roda novamente todas as queries.
 
 ### 7.4  "Por que esse procedimento precisa de cursor?"
 
-> Porque ele gera **uma linha por funcionário** numa **tabela diferente**
-> (`resumo_vendas_funcionario`), com a classificação da função
-> `fn_categoria_funcionario` aplicada por linha. Um único UPDATE/INSERT
-> SELECT não conseguiria, porque a classificação depende de uma chamada
-> de função PL/SQL para CADA matrícula.
+> Porque ele percorre **cada produto** e, para cada um, calcula um
+> agregado próprio (`SUM(quantidade)` em `vende_produto`) e decide
+> individualmente qual percentual aplicar. Um único UPDATE com `CASE`
+> não conseguiria, porque a decisão depende de uma agregação calculada
+> linha-a-linha durante a iteração, com IF/ELSEIF por produto.
 
 ### 7.5  "E se o MySQL estiver fora do ar?"
 

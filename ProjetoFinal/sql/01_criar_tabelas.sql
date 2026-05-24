@@ -235,16 +235,3 @@ CREATE TABLE log_alteracoes (
     descricao   VARCHAR(500) NOT NULL,
     data_hora   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
--- ---------------------------------------------------------------------
--- 15. RESUMO_VENDAS_FUNCIONARIO  -  alimentada pelo procedimento com CURSOR
--- ---------------------------------------------------------------------
-CREATE TABLE resumo_vendas_funcionario (
-    matricula     VARCHAR(20)  NOT NULL,
-    nome          VARCHAR(100) NOT NULL,
-    total_vendas  INT          NOT NULL,
-    valor_total   DECIMAL(10,2) NOT NULL,
-    classificacao VARCHAR(20)  NOT NULL,
-    data_geracao  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT pk_resumo_func PRIMARY KEY (matricula)
-);

@@ -22,7 +22,8 @@ public class PainelFiliais extends JPanel {
 
     public PainelFiliais() {
         setLayout(new BorderLayout(5,5));
-        setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        setBorder(Tema.bordaPainel());
+        Tema.estilizarTabela(tabela);
 
         JButton btInserir   = new JButton("Inserir");
         JButton btEditar    = new JButton("Editar");

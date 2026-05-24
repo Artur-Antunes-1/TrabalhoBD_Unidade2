@@ -29,7 +29,8 @@ public class PainelVendas extends JPanel {
 
     public PainelVendas() {
         setLayout(new BorderLayout(5,5));
-        setBorder(BorderFactory.createEmptyBorder(8,8,8,8));
+        setBorder(Tema.bordaPainel());
+        Tema.estilizarTabela(tabela);
 
         JButton btInserir   = new JButton("Inserir Venda");
         JButton btEditar    = new JButton("Editar");
@@ -170,6 +171,7 @@ public class PainelVendas extends JPanel {
                         it.getNfe(), it.getCodProduto(), it.getQuantidade()});
             }
             JTable tab = new JTable(mod);
+            Tema.estilizarTabela(tab);
 
             JTextField campoCodProd = new JTextField(8);
             JTextField campoQtd     = new JTextField(4);
