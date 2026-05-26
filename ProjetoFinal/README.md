@@ -1,7 +1,7 @@
 # Supermercado BD - Trabalho de Banco de Dados (Unidade 02)
 
-**Disciplina:** Banco de Dados 2026.1
-**Grupo:** Artur Antunes, Pedro Ferraz, Ricardo Machado, Victor Uen
+ ## **Disciplina:** Banco de Dados 2026.1
+ ### **Grupo:** Artur Antunes, Pedro Ferraz, Ricardo Machado, Victor Uen
 
 Aplicação **Java Desktop (Swing) + MySQL** que consolida as **Etapas 04, 05 e 06** do projeto. Toda a integração com o banco é feita com **JDBC puro + PreparedStatement** — sem ORM.
 
