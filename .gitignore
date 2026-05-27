@@ -1,6 +1,7 @@
 # Ignora tudo na raiz do repositorio
 /*
 
-# Mantem apenas a entrega final e este arquivo
+# Mantem apenas a entrega final, este arquivo e o README de vitrine
 !/.gitignore
+!/README.md
 !/ProjetoFinal/

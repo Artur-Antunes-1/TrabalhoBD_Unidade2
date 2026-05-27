@@ -6,6 +6,8 @@
 **Grupo:** Artur Antunes · Pedro Ferraz · Ricardo Machado · Victor Uen
 **SGBD:** MySQL 8.0+
 
+> 📁 **Código-fonte:** está todo em [`ProjetoFinal/`](ProjetoFinal/). Veja também [`ProjetoFinal/GUIA_DE_ESTUDO.md`](ProjetoFinal/GUIA_DE_ESTUDO.md) para o guia detalhado da apresentação oral.
+
 ---
 
 ## Sumário
@@ -24,7 +26,7 @@
 
 Modela uma rede fictícia de supermercados com **13 tabelas** (filial, funcionário, dependente, cliente, produto, departamento, fornecedor, entrega, venda + tabelas associativas e multivaloradas) e expõe toda a operação em uma janela Swing com **9 abas**: 5 CRUDs, consultas/views, funções/procedimentos, logs e um dashboard com 5 gráficos.
 
-A camada de persistência é DAO clássico — uma classe por entidade, SQL escrito à mão, conexão centralizada em [ConexaoBanco.java](src/main/java/conexao/ConexaoBanco.java). Cada elemento avançado (índice, view, função, procedure, trigger) traz justificativa em comentário no próprio script SQL e é demonstrável ao vivo pela UI.
+A camada de persistência é DAO clássico — uma classe por entidade, SQL escrito à mão, conexão centralizada em [ConexaoBanco.java](ProjetoFinal/src/main/java/conexao/ConexaoBanco.java). Cada elemento avançado (índice, view, função, procedure, trigger) traz justificativa em comentário no próprio script SQL e é demonstrável ao vivo pela UI.
 
 ---
 
@@ -32,7 +34,7 @@ A camada de persistência é DAO clássico — uma classe por entidade, SQL escr
 
 ```
 ProjetoFinal/
-├── README.md                     ← este arquivo
+├── README.md                     ← versão idêntica deste arquivo dentro da pasta do projeto
 ├── GUIA_DE_ESTUDO.md             ← guia para a apresentação oral
 ├── rodar.bat                     ← atalho: compila e roda no Windows
 ├── pom.xml                       ← build Maven (mysql-connector-j + JFreeChart)
@@ -93,7 +95,7 @@ SOURCE C:/.../ProjetoFinal/sql/04_funcoes_procedimentos_triggers.sql;
 
 ### 3.3  Conferir credenciais
 
-Abra [ConexaoBanco.java](src/main/java/conexao/ConexaoBanco.java) e ajuste se necessário:
+Abra [ConexaoBanco.java](ProjetoFinal/src/main/java/conexao/ConexaoBanco.java) e ajuste se necessário:
 
 ```java
 private static final String URL_BANCO = "jdbc:mysql://localhost:3306/supermercado";
@@ -105,20 +107,23 @@ private static final String SENHA     = "root";
 
 **Atalho no Windows** (compila e executa em um clique):
 ```bat
+cd ProjetoFinal
 rodar.bat
 ```
 
 **Com Maven:**
 ```bash
+cd ProjetoFinal
 mvn -q exec:java -Dexec.mainClass=Principal
 ```
 
 **Com IDE (IntelliJ / Eclipse / VS Code):**
-- Importe como projeto Maven
+- Importe a pasta `ProjetoFinal/` como projeto Maven
 - Execute `Principal.java`
 
 **Sem Maven (compilação manual com os JARs em `lib/`):**
 ```bash
+cd ProjetoFinal
 javac -d out -cp "lib/*" src/main/java/**/*.java
 java  -cp "out;lib/*" Principal
 ```
@@ -145,12 +150,12 @@ java  -cp "out;lib/*" Principal
 
 | Etapa | Item                                       | Onde está                                                              |
 |-------|--------------------------------------------|------------------------------------------------------------------------|
-| 04    | 4 consultas SQL                            | [03_consultas_views_indices.sql](sql/03_consultas_views_indices.sql) + `RelatoriosDAO.consultaXxx()` + aba *Consultas* |
-| 04    | 2 views                                    | [03_consultas_views_indices.sql](sql/03_consultas_views_indices.sql) + aba *Consultas* (botões "View vw_…")            |
-| 04    | 2 índices                                  | [03_consultas_views_indices.sql](sql/03_consultas_views_indices.sql) (justificativas em comentário)                    |
-| 05    | 2 funções (1 com IF/ELSE)                  | [04_funcoes_procedimentos_triggers.sql](sql/04_funcoes_procedimentos_triggers.sql) + aba *Funções/Procedimentos*       |
-| 05    | 2 procedures (1 com UPDATE em massa, 1 com CURSOR) | [04_funcoes_procedimentos_triggers.sql](sql/04_funcoes_procedimentos_triggers.sql) + aba *Funções/Procedimentos*       |
-| 05    | 2 triggers (1 valida via `SIGNAL`, 1 alimenta log de auditoria) | [04_funcoes_procedimentos_triggers.sql](sql/04_funcoes_procedimentos_triggers.sql) — demo na aba *Produtos* + *Logs*  |
+| 04    | 4 consultas SQL                            | [03_consultas_views_indices.sql](ProjetoFinal/sql/03_consultas_views_indices.sql) + `RelatoriosDAO.consultaXxx()` + aba *Consultas* |
+| 04    | 2 views                                    | [03_consultas_views_indices.sql](ProjetoFinal/sql/03_consultas_views_indices.sql) + aba *Consultas* (botões "View vw_…")            |
+| 04    | 2 índices                                  | [03_consultas_views_indices.sql](ProjetoFinal/sql/03_consultas_views_indices.sql) (justificativas em comentário)                    |
+| 05    | 2 funções (1 com IF/ELSE)                  | [04_funcoes_procedimentos_triggers.sql](ProjetoFinal/sql/04_funcoes_procedimentos_triggers.sql) + aba *Funções/Procedimentos*       |
+| 05    | 2 procedures (1 com UPDATE em massa, 1 com CURSOR) | [04_funcoes_procedimentos_triggers.sql](ProjetoFinal/sql/04_funcoes_procedimentos_triggers.sql) + aba *Funções/Procedimentos*       |
+| 05    | 2 triggers (1 valida via `SIGNAL`, 1 alimenta log de auditoria) | [04_funcoes_procedimentos_triggers.sql](ProjetoFinal/sql/04_funcoes_procedimentos_triggers.sql) — demo na aba *Produtos* + *Logs*  |
 | 06    | CRUD para ≥ 4 tabelas                      | 5 abas CRUD (Cliente, Produto, Funcionário, Filial, Venda)             |
 | 06    | Visualizar ≥ 1 função + 1 procedure + 1 trigger | Aba *Funções/Procedimentos* + aba *Logs* + aba *Produtos*              |
 | 06    | Consultas/views acessíveis na UI           | Aba *Consultas/Views*                                                  |
