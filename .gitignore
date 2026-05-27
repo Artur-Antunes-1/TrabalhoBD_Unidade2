@@ -5,3 +5,6 @@
 !/.gitignore
 !/README.md
 !/ProjetoFinal/
+
+# Guias de estudo internos (anotacoes pessoais - nao versionar)
+ProjetoFinal/GUIA_DE_ESTUDO.*

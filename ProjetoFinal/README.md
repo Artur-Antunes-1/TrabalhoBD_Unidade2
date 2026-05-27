@@ -33,7 +33,6 @@ A camada de persistência é DAO clássico — uma classe por entidade, SQL escr
 ```
 ProjetoFinal/
 ├── README.md                     ← este arquivo
-├── GUIA_DE_ESTUDO.md             ← guia para a apresentação oral
 ├── rodar.bat                     ← atalho: compila e roda no Windows
 ├── pom.xml                       ← build Maven (mysql-connector-j + JFreeChart)
 ├── lib/                          ← JARs avulsos (caso não use Maven)

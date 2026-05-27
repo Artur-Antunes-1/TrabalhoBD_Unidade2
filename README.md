@@ -6,7 +6,7 @@
 **Grupo:** Artur Antunes · Pedro Ferraz · Ricardo Machado · Victor Uen
 **SGBD:** MySQL 8.0+
 
-> 📁 **Código-fonte:** está todo em [`ProjetoFinal/`](ProjetoFinal/). Veja também [`ProjetoFinal/GUIA_DE_ESTUDO.md`](ProjetoFinal/GUIA_DE_ESTUDO.md) para o guia detalhado da apresentação oral.
+> 📁 **Código-fonte:** está todo em [`ProjetoFinal/`](ProjetoFinal/).
 
 ---
 
@@ -35,7 +35,6 @@ A camada de persistência é DAO clássico — uma classe por entidade, SQL escr
 ```
 ProjetoFinal/
 ├── README.md                     ← versão idêntica deste arquivo dentro da pasta do projeto
-├── GUIA_DE_ESTUDO.md             ← guia para a apresentação oral
 ├── rodar.bat                     ← atalho: compila e roda no Windows
 ├── pom.xml                       ← build Maven (mysql-connector-j + JFreeChart)
 ├── lib/                          ← JARs avulsos (caso não use Maven)
