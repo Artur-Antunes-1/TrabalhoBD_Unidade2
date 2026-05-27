@@ -1,0 +1,6 @@
+# Ignora tudo na raiz do repositorio
+/*
+
+# Mantem apenas a entrega final e este arquivo
+!/.gitignore
+!/ProjetoFinal/
