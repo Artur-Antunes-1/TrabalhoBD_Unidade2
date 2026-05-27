@@ -10,7 +10,11 @@ import java.util.List;
 
 /**
  * Painel "Logs" - mostra a tabela log_alteracoes alimentada
- * pelos dois triggers (Etapa 05).
+ * pelo trigger tg_log_alteracao_preco (Etapa 05).
+ *
+ * O outro trigger da Etapa 05 (tg_limita_variacao_preco) e BEFORE
+ * UPDATE e nao grava log - apenas bloqueia mudancas de preco
+ * superiores a 80% via SIGNAL.
  */
 public class PainelLogs extends JPanel {
 
@@ -26,7 +30,7 @@ public class PainelLogs extends JPanel {
 
         JButton btAtualizar = new JButton("Atualizar logs");
         JPanel  topo = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        topo.add(new JLabel("Logs gerados pelos triggers tg_log_nova_venda e tg_log_alteracao_preco:"));
+        topo.add(new JLabel("Logs gerados pelo trigger tg_log_alteracao_preco:"));
         topo.add(btAtualizar);
 
         JTable tabela = new JTable(modelo);

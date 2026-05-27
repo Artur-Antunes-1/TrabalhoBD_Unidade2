@@ -14,7 +14,7 @@
 --       2.1  pr_atualizar_preco_departamento    - UPDATE em massa
 --       2.2  pr_promocao_produtos_parados       - CURSOR sobre produto
 --   3) 02 TRIGGERS com justificativa:
---       3.1  tg_log_nova_venda                  - AFTER INSERT em vende
+--       3.1  tg_limita_variacao_preco           - BEFORE UPDATE em produto
 --       3.2  tg_log_alteracao_preco             - AFTER UPDATE em produto
 --   4) TABELAS DE APOIO usadas pelos triggers:
 --       - log_alteracoes              (alimentada pelos triggers)
@@ -208,26 +208,35 @@ DELIMITER ;
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
--- 3.1  tg_log_nova_venda  -  AFTER INSERT em vende
---      Justificativa: toda vez que uma venda e registrada queremos
---      manter um historico/auditoria em log_alteracoes.  Esse log
---      ajuda a investigar problemas e e visualizado pela aplicacao
---      na aba "Logs".
+-- 3.1  tg_limita_variacao_preco  -  BEFORE UPDATE em produto
+--      Justificativa: precos de produtos sao alterados manualmente
+--      pela aplicacao e tambem em massa pelas procedures
+--      (pr_atualizar_preco_departamento, pr_promocao_produtos_parados).
+--      Erros de digitacao (ex.: "feijao por R$ 0,01" por esquecer uma
+--      casa decimal) ou parametros errados nas procedures podem causar
+--      prejuizo enorme.  Este trigger funciona como rede de seguranca:
+--      bloqueia qualquer UPDATE que tente alterar o preco em mais de
+--      80% para cima ou para baixo, abortando a operacao com SIGNAL.
+--      Forma um par com o 3.2: este IMPEDE mudancas absurdas, o 3.2
+--      REGISTRA em log as mudancas que passaram.
 -- ---------------------------------------------------------------------
+-- Remove trigger antigo desta posicao (caso o banco ainda tenha dele)
 DROP TRIGGER IF EXISTS tg_log_nova_venda;
+DROP TRIGGER IF EXISTS tg_limita_variacao_preco;
 DELIMITER $$
-CREATE TRIGGER tg_log_nova_venda
-AFTER INSERT ON vende
+CREATE TRIGGER tg_limita_variacao_preco
+BEFORE UPDATE ON produto
 FOR EACH ROW
 BEGIN
-    INSERT INTO log_alteracoes (tabela, tipo_evento, descricao)
-    VALUES (
-        'vende',
-        'INSERT',
-        CONCAT('Nova venda NF-e ', NEW.nfe,
-               ' registrada por ', NEW.matricula_func,
-               ' em ', NEW.data_venda)
-    );
+    -- So validamos quando havia um preco anterior > 0 e o preco mudou
+    IF OLD.preco_base > 0 AND NEW.preco_base <> OLD.preco_base THEN
+        IF NEW.preco_base > OLD.preco_base * 1.8
+           OR NEW.preco_base < OLD.preco_base * 0.2 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT =
+                'Variacao de preco maior que 80% nao permitida - confirme com gerente';
+        END IF;
+    END IF;
 END $$
 DELIMITER ;
 

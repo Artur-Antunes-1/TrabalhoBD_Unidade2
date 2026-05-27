@@ -267,18 +267,19 @@ Arquivo: **`sql/04_funcoes_procedimentos_triggers.sql`**.
 
 ### 5.3  Triggers
 
-| Trigger                       | Quando dispara              | O que faz                                                       |
-|-------------------------------|-----------------------------|-----------------------------------------------------------------|
-| `tg_log_nova_venda`           | `AFTER INSERT ON vende`     | Insere linha em `log_alteracoes` registrando a venda            |
-| `tg_log_alteracao_preco`      | `AFTER UPDATE ON produto`   | Se preço mudou, registra preço antigo + novo em `log_alteracoes` |
+| Trigger                       | Quando dispara              | O que faz                                                              |
+|-------------------------------|-----------------------------|------------------------------------------------------------------------|
+| `tg_limita_variacao_preco`    | `BEFORE UPDATE ON produto`  | Aborta o UPDATE (via `SIGNAL`) se o novo preço variar mais de 80% para cima ou para baixo — rede de segurança contra erro de digitação |
+| `tg_log_alteracao_preco`      | `AFTER UPDATE ON produto`   | Se preço mudou, registra preço antigo + novo em `log_alteracoes`        |
 
-> **Como explicar trigger:** "É um gatilho. O banco executa o bloco automaticamente quando uma operação (INSERT/UPDATE/DELETE) acontece em uma tabela. Não é chamado pelo Java — o Java só faz INSERT/UPDATE comum, e o trigger 'pega carona' para criar o log."
+> **Por que os dois formam um par:** o 3.1 (`BEFORE`) **impede** mudanças absurdas; o 3.2 (`AFTER`) **registra em log** as mudanças que passaram pelo filtro. Demonstra dois usos clássicos de trigger: validação de regra de negócio e auditoria.
 
-> **Como mostrar o trigger funcionando ao vivo:**
-> 1. Vá na aba **Vendas** → clique **Inserir**.
-> 2. Crie uma NF-e nova qualquer.
-> 3. Vá na aba **Logs** → clique **Atualizar logs**.
-> 4. A nova entrada aparece (gerada pelo trigger).
+> **Como explicar trigger:** "É um gatilho. O banco executa o bloco automaticamente quando uma operação (INSERT/UPDATE/DELETE) acontece em uma tabela. Não é chamado pelo Java — o Java só faz UPDATE comum, e o trigger 'pega carona' para validar ou registrar."
+
+> **Como mostrar os triggers funcionando ao vivo:**
+> 1. Vá na aba **Produtos** → escolha um produto qualquer e clique **Editar**.
+> 2. **Caso 1 (3.2 — log):** mude o preço de R$ 10 para R$ 15 (variação dentro do limite). Salva normalmente. Vá em **Logs** → **Atualizar logs** e veja a entrada nova com preço antigo/novo.
+> 3. **Caso 2 (3.1 — bloqueio):** edite o mesmo produto e tente colocar R$ 0,01 (variação > 80% para baixo). A aplicação mostra erro: *"Variacao de preco maior que 80% nao permitida"* — o trigger abortou via `SIGNAL`.
 
 ---
 

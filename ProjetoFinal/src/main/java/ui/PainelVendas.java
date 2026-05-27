@@ -13,10 +13,12 @@ import java.util.List;
 /**
  * Painel CRUD da tabela VENDE.
  *
- *  Ao inserir uma venda dispara o trigger tg_log_nova_venda
- *  (ver aba Logs).
  *  Apos inserir a venda, o usuario pode adicionar itens (linhas
  *  em vende_produto) tambem pela tela.
+ *
+ *  Observacao: os triggers da Etapa 05 agora atuam sobre a tabela
+ *  PRODUTO (tg_limita_variacao_preco e tg_log_alteracao_preco),
+ *  nao sobre VENDE.
  */
 public class PainelVendas extends JPanel {
 
